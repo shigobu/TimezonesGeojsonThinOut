@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,6 +24,17 @@ namespace TimezonesGeojsonThinOut
 		public MainWindow()
 		{
 			InitializeComponent();
+		}
+
+		private void SelectButton_Click(object sender, RoutedEventArgs e)
+		{
+			OpenFileDialog openFileDialog = new OpenFileDialog();
+			openFileDialog.Filter = "json File(*.json)|*.json";
+			bool? result = openFileDialog.ShowDialog();
+			if ((bool)result)
+			{
+				fileNameTextBox.Text = openFileDialog.FileName;
+			}
 		}
 	}
 }

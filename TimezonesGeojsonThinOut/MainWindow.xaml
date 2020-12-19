@@ -5,8 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TimezonesGeojsonThinOut"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
-        
-    </Grid>
+        Title="タイムゾーン境界ファイル間引きアプリ" Width="600" Height="120" MaxHeight="120" MinHeight="120" MinWidth="300" WindowStartupLocation="CenterScreen">
+	<DockPanel Margin="5">
+		<Button DockPanel.Dock="Bottom" x:Name="executeButton" Content="実行" Margin="3"/>
+		<DockPanel DockPanel.Dock="Bottom">
+			<Button x:Name="selectButton" DockPanel.Dock="Right" Content="選択" Width="40" Margin="3" Click="SelectButton_Click"/>
+			<TextBox x:Name="fileNameTextBox" Margin="3"/>
+		</DockPanel>
+		<ProgressBar x:Name="progress"  Margin="3"/>
+	</DockPanel>
 </Window>
