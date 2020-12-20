@@ -7,11 +7,11 @@
         mc:Ignorable="d"
         Title="タイムゾーン境界ファイル間引きアプリ" Width="600" Height="120" MaxHeight="120" MinHeight="120" MinWidth="300" WindowStartupLocation="CenterScreen">
 	<DockPanel Margin="5">
-		<Button DockPanel.Dock="Bottom" x:Name="executeButton" Content="実行" Margin="3"/>
+		<Button DockPanel.Dock="Bottom" x:Name="executeButton" Content="実行" Margin="3" Click="ExecuteButton_Click"/>
 		<DockPanel DockPanel.Dock="Bottom">
 			<Button x:Name="selectButton" DockPanel.Dock="Right" Content="選択" Width="40" Margin="3" Click="SelectButton_Click"/>
 			<TextBox x:Name="fileNameTextBox" Margin="3"/>
 		</DockPanel>
-		<ProgressBar x:Name="progress"  Margin="3"/>
+		<ProgressBar x:Name="progress" Minimum="0" Margin="3"/>
 	</DockPanel>
 </Window>
