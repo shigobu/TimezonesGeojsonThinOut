@@ -198,7 +198,9 @@ namespace TimezonesGeojsonThinOut
 			outSelectButton.IsEnabled = enable;
 		}
 
-		delegate void SetProgressBarMaxDelegate(int max);
+        #region コントロールの情報取得関数
+
+        delegate void SetProgressBarMaxDelegate(int max);
 		/// <summary>
 		/// プログレスバーの最大値を設定します。
 		/// </summary>
@@ -281,7 +283,9 @@ namespace TimezonesGeojsonThinOut
 			}
 		}
 
-		private float RoundFloat(float val)
+        #endregion
+
+        private float RoundFloat(float val)
 		{
 			//整数部分の桁数を計算
 			int num = Math.Abs((int)Math.Truncate(val));
@@ -289,5 +293,5 @@ namespace TimezonesGeojsonThinOut
 
 			return (float)Math.Round(val, 6 - digit);
 		}
-	}
+    }
 }
