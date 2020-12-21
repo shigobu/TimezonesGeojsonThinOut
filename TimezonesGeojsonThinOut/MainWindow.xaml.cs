@@ -58,10 +58,22 @@ namespace TimezonesGeojsonThinOut
 		{
 			ChangeEnable(false);
 
-			await Task.Run((Action)Execute);
+            try
+            {
+			    await Task.Run((Action)Execute);
+                MessageBox.Show("すべて完了しました。");
+            }
+            catch (Exception　ex)
+            {
+                MessageBox.Show("エラーが発生しました。");
+            }
+            finally
+            {
+                ChangeEnable(true);
+                GC.Collect();
+            }
 
-			ChangeEnable(true);
-		}
+        }
 
 		/// <summary>
 		/// json間引き処理本体
@@ -90,103 +102,94 @@ namespace TimezonesGeojsonThinOut
 			JsonDocument document = JsonDocument.Parse(jsonData);
 
 			JsonElement featuresElement = document.RootElement.GetProperty("features");
-			int maxLength = 0;
-			int minLength = int.MaxValue;
-			bool once = false;
-			List<int> countList = new List<int>(500);
 
 			SetProgressBarIsIndeterminate(false);
 
 			SetProgressBarMax(featuresElement.GetArrayLength());
-			for(int j = 0; j < featuresElement.GetArrayLength(); j++)
+			for(int i = 0; i < featuresElement.GetArrayLength(); i++)
 			{
-				JsonElement feature = featuresElement[j];
+				JsonElement feature = featuresElement[i];
 				JsonElement geometry = feature.GetProperty("geometry");
 				JsonElement coordinates = geometry.GetProperty("coordinates");
 
 				string typeName = geometry.GetProperty("type").GetString();
 				if (typeName == "Polygon")
 				{
-					int pointCount = coordinates[0].GetArrayLength();
-
-					//間引くための係数
-					int numThin;
-					if (pointCount < 10)
-					{
-						numThin = 1;
-					}
-					else
-					{
-						numThin = pointCount / 10;
-					}
-
-					int pointCountThin = pointCount / numThin;
-
-					Feature newFeature = new Feature
-					{
-						Tzid = feature.GetProperty("properties").GetProperty("tzid").GetString(),
-						Coordinates = new float[pointCountThin/* + 1*/][]
-					};
-
-					for (int i = 0; i < pointCount; i += numThin)
-					{
-						//配列外の参照があるので、ガード。
-						if ((i / numThin) >= newFeature.Coordinates.Length)
-						{
-							break;
-						}
-						newFeature.Coordinates[i / numThin] = new float[2];
-						newFeature.Coordinates[i / numThin][0] = RoundFloat(coordinates[0][i][0].GetSingle());
-						newFeature.Coordinates[i / numThin][1] = RoundFloat(coordinates[0][i][1].GetSingle());
-					}
-
-					//ファイル書き出し
-					string jsonString = JsonSerializer.Serialize(newFeature);
-					string newJsonFileName = Path.Combine(GetOutDirectoryName(), newFeature.Tzid.Replace('/', '-') + Path.GetExtension(jsonFileName));
-					using (StreamWriter streamWriter = new StreamWriter(newJsonFileName, false))
-					{
-						streamWriter.Write(jsonString);
-					}
-					//break;
-				}
+                    string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
+					string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + Path.GetExtension(jsonFileName));
+                    OutJsonFile(coordinates[0], tzid, newJsonFileName);
+                }
 				else if (typeName == "MultiPolygon")
 				{
-					foreach (var coordinates1 in coordinates.EnumerateArray())
-					{
-						foreach (var coordinates2 in coordinates1.EnumerateArray())
-						{
-							if (!once)
-							{
-								once = true;
-								Console.WriteLine(coordinates2.EnumerateArray().First());
-							}
+                    for (int j = 0; j < coordinates.GetArrayLength(); j++)
+                    {
+                        JsonElement coordinates1 = coordinates[j];
 
-							int temp = coordinates2.GetArrayLength();
-							countList.Add(temp);
-							if (temp > maxLength)
-							{
-								maxLength = temp;
-							}
-							if (temp < minLength)
-							{
-								minLength = temp;
-							}
-						}
-					}
-				}
-				else
+                        for (int k = 0; k < coordinates1.GetArrayLength(); k++)
+                        {
+                            JsonElement coordinates2 = coordinates1[k];
+                            string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
+                            string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + Path.GetExtension(jsonFileName));
+                            OutJsonFile(coordinates2, tzid, newJsonFileName);
+                        }
+                    }
+                }
+                else
 				{
 					/*何もしない*/
 				}
-				SetProgressBarValue(j);
+				SetProgressBarValue(i);
 			}
 		}
 
-		/// <summary>
-		/// コントロールの有効・無効を切り替えます。
-		/// </summary>
-		/// <param name="enable">有効・無効</param>
-		private void ChangeEnable(bool enable)
+        private void OutJsonFile(JsonElement coordinates, string tzid, string outFileName)
+        {
+            int pointCount = coordinates.GetArrayLength();
+
+            //間引くための係数
+            int numThin;
+            if (pointCount < 10)
+            {
+                numThin = 1;
+            }
+            else
+            {
+                numThin = pointCount / 10;
+            }
+
+            int pointCountThin = pointCount / numThin;
+
+            Feature newFeature = new Feature
+            {
+                Tzid = tzid,
+                Coordinates = new float[pointCountThin][]
+            };
+
+            for (int i = 0; i < pointCount; i += numThin)
+            {
+                //配列外の参照があるので、ガード。
+                if ((i / numThin) >= newFeature.Coordinates.Length)
+                {
+                    break;
+                }
+                newFeature.Coordinates[i / numThin] = new float[2];
+                newFeature.Coordinates[i / numThin][0] = RoundFloat(coordinates[i][0].GetSingle());
+                newFeature.Coordinates[i / numThin][1] = RoundFloat(coordinates[i][1].GetSingle());
+            }
+
+            //ファイル書き出し
+            string jsonString = JsonSerializer.Serialize(newFeature);
+            using (StreamWriter streamWriter = new StreamWriter(outFileName, false))
+            {
+                streamWriter.Write(jsonString);
+            }
+        }
+
+        /// <summary>
+        /// コントロールの有効・無効を切り替えます。
+        /// </summary>
+        /// <param name="enable">有効・無効</param>
+        private void ChangeEnable(bool enable)
 		{
 			selectButton.IsEnabled = enable;
 			fileNameTextBox.IsEnabled = enable;
