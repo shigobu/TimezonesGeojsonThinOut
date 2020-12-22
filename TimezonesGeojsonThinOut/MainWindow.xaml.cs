@@ -96,7 +96,12 @@ namespace TimezonesGeojsonThinOut
 			SetProgressBarIsIndeterminate(false);
 
 			SetProgressBarMax(featuresElement.GetArrayLength());
-			for(int i = 0; i < featuresElement.GetArrayLength(); i++)
+			int count = 0;
+			ParallelOptions options = new ParallelOptions
+			{
+				MaxDegreeOfParallelism = 8
+			};
+			Parallel.For(0, featuresElement.GetArrayLength(), options, i =>
 			{
 				JsonElement feature = featuresElement[i];
 				JsonElement geometry = feature.GetProperty("geometry");
@@ -106,9 +111,11 @@ namespace TimezonesGeojsonThinOut
 				if (typeName == "Polygon")
 				{
                     string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
-					string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + Path.GetExtension(jsonFileName));
-                    OutJsonFile(coordinates[0], tzid, newJsonFileName);
-                }
+					//string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + Path.GetExtension(jsonFileName));
+					//OutJsonFile(coordinates[0], tzid, newJsonFileName);
+					string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + ".csv");
+					OutCsvFile(coordinates[0], tzid, newJsonFileName);
+				}
 				else if (typeName == "MultiPolygon")
 				{
                     for (int j = 0; j < coordinates.GetArrayLength(); j++)
@@ -119,17 +126,20 @@ namespace TimezonesGeojsonThinOut
                         {
                             JsonElement coordinates2 = coordinates1[k];
                             string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
-                            string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + Path.GetExtension(jsonFileName));
-                            OutJsonFile(coordinates2, tzid, newJsonFileName);
-                        }
-                    }
+                            //string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + Path.GetExtension(jsonFileName));
+                            //OutJsonFile(coordinates2, tzid, newJsonFileName);
+							string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + ".csv");
+							OutCsvFile(coordinates2, tzid, newJsonFileName);
+						}
+					}
                 }
                 else
 				{
 					/*何もしない*/
 				}
-				SetProgressBarValue(i);
-			}
+				count++;
+				SetProgressBarValue(count);
+			});
 		}
 
         private void OutJsonFile(JsonElement coordinates, string tzid, string outFileName)
@@ -175,11 +185,43 @@ namespace TimezonesGeojsonThinOut
             }
         }
 
-        /// <summary>
-        /// コントロールの有効・無効を切り替えます。
-        /// </summary>
-        /// <param name="enable">有効・無効</param>
-        private void ChangeEnable(bool enable)
+		private void OutCsvFile(JsonElement coordinates, string tzid, string outFileName)
+		{
+			int pointCount = coordinates.GetArrayLength();
+
+			//間引くための係数
+			int coefficient = 10000;
+			int numThin = 1;
+			if (pointCount < coefficient)
+			{
+				numThin = 1;
+			}
+			else
+			{
+				numThin = pointCount / coefficient;
+			}
+
+			//ファイル書き出し
+			using (StreamWriter streamWriter = new StreamWriter(outFileName, false))
+			{
+				streamWriter.WriteLine(tzid);
+
+				for (int i = 0; i < pointCount; i += numThin)
+				{
+					float x, y;
+					x = coordinates[i][0].GetSingle();
+					y = coordinates[i][1].GetSingle();
+
+					streamWriter.WriteLine($"{x},{y}");
+				}
+			}
+		}
+
+		/// <summary>
+		/// コントロールの有効・無効を切り替えます。
+		/// </summary>
+		/// <param name="enable">有効・無効</param>
+		private void ChangeEnable(bool enable)
 		{
 			selectButton.IsEnabled = enable;
 			fileNameTextBox.IsEnabled = enable;
