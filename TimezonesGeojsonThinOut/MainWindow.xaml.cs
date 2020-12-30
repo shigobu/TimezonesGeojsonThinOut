@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using COMInterfaceWrapper;
+using TimeZoneConverter;
 
 namespace TimezonesGeojsonThinOut
 {
@@ -55,7 +56,7 @@ namespace TimezonesGeojsonThinOut
             }
             catch (Exception　ex)
             {
-                MessageBox.Show("エラーが発生しました。");
+                MessageBox.Show("エラーが発生しました。" + Environment.NewLine + ex.Message);
             }
             finally
             {
@@ -144,9 +145,37 @@ namespace TimezonesGeojsonThinOut
 				count++;
 				SetProgressBarValue(count);
 			});
+
+			System.Threading.Thread.Sleep(100);
+
+			//一つのファイルにまとめる
+			SetProgressBarIsIndeterminate(true);
+			string outFileName = Path.Combine(GetOutDirectoryName(), "DATA.bin");
+			if (File.Exists(outFileName))
+			{
+				File.Delete(outFileName);
+			}
+			//ファイル列挙
+			string[] filenames = Directory.GetFiles(GetOutDirectoryName(), "*.bin");
+			using (BinaryWriter binaryWriter = new BinaryWriter(new FileStream(outFileName, FileMode.Create), System.Text.Encoding.ASCII))
+			{
+				foreach (var filename in filenames)
+				{
+					using (FileStream stream = new FileStream(filename, FileMode.Open))
+					{
+						int readbyte = 0;
+						while ((readbyte = stream.ReadByte()) != -1)
+						{
+							binaryWriter.Write((byte)readbyte);
+						}
+					}
+					File.Delete(filename);
+				}
+			}
+			SetProgressBarIsIndeterminate(false);
 		}
 
-        private void OutJsonFile(JsonElement coordinates, string tzid, string outFileName)
+		private void OutJsonFile(JsonElement coordinates, string tzid, string outFileName)
         {
             int pointCount = coordinates.GetArrayLength();
 
@@ -226,6 +255,20 @@ namespace TimezonesGeojsonThinOut
         {
             int pointCount = coordinates.GetArrayLength();
 
+			short offsetMin = 0;
+			try
+			{
+				//オフセットを計算し、分で書く。short型2バイト。
+				string tzidWin = TZConvert.IanaToWindows(tzid);
+				TimeZoneInfo timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(tzidWin);
+				offsetMin = (short)timeZoneInfo.BaseUtcOffset.TotalMinutes;
+			}
+			catch (Exception ex)
+			{
+				//タイムゾーンが見つからない場合、ファイルは作成しない。
+				return;
+			}
+
             //間引くための係数
             int coefficient = 10000;
             int numThin = 1;
@@ -241,10 +284,14 @@ namespace TimezonesGeojsonThinOut
             //ファイル書き出し
             using (BinaryWriter binaryWriter = new BinaryWriter(new FileStream(outFileName, FileMode.Create), System.Text.Encoding.ASCII))
             {
-
                 binaryWriter.Write((tzid + "\0").ToCharArray());
 
-                for (int i = 0; i < pointCount; i += numThin)
+				binaryWriter.Write(offsetMin);
+
+				//後に続く座標のバイト数を計算
+				int pointThinByteCount = (int)Math.Ceiling((double)pointCount / numThin) * 8;
+				binaryWriter.Write(pointThinByteCount);
+				for (int i = 0; i < pointCount; i += numThin)
                 {
                     binaryWriter.Write(coordinates[i][0].GetSingle());
                     binaryWriter.Write(coordinates[i][1].GetSingle());
