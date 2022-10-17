@@ -6,6 +6,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using COMInterfaceWrapper;
 using TimeZoneConverter;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Collections.Concurrent;
+using System.Linq;
 
 namespace TimezonesGeojsonThinOut
 {
@@ -102,7 +106,10 @@ namespace TimezonesGeojsonThinOut
             {
                 MaxDegreeOfParallelism = Environment.ProcessorCount / 2
             };
+            ConcurrentBag<Zone> zones = new ConcurrentBag<Zone>();
+            //List<Zone> zones = new List<Zone>();
             Parallel.For(0, featuresElement.GetArrayLength(), options, i =>
+            //for (int i = 0; i < featuresElement.GetArrayLength(); i++)
             {
                 JsonElement feature = featuresElement[i];
                 JsonElement geometry = feature.GetProperty("geometry");
@@ -112,12 +119,14 @@ namespace TimezonesGeojsonThinOut
                 if (typeName == "Polygon")
                 {
                     string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
-                    //string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + Path.GetExtension(jsonFileName));
-                    //OutJsonFile(coordinates[0], tzid, newJsonFileName);
-                    //string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + ".csv");
-                    //OutCsvFile(coordinates[0], tzid, newJsonFileName);
                     string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + ".bin");
-                    OutBinaryFile(coordinates[0], tzid, newJsonFileName);
+                    string zoneName = tzid;
+                    //OutBinaryFile(coordinates[0], tzid, newJsonFileName);
+                    Zone tempZpne = MakeZone(coordinates[0], tzid, zoneName);
+                    if (tempZpne != null)
+                    {
+                        zones.Add(tempZpne);
+                    }
                 }
                 else if (typeName == "MultiPolygon")
                 {
@@ -129,12 +138,14 @@ namespace TimezonesGeojsonThinOut
                         {
                             JsonElement coordinates2 = coordinates1[k];
                             string tzid = feature.GetProperty("properties").GetProperty("tzid").GetString();
-                            //string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + Path.GetExtension(jsonFileName));
-                            //OutJsonFile(coordinates2, tzid, newJsonFileName);
-                            //string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + ".csv");
-                            //OutCsvFile(coordinates2, tzid, newJsonFileName);
                             string newJsonFileName = Path.Combine(GetOutDirectoryName(), tzid.Replace('/', '-') + j.ToString("D2") + k.ToString("D2") + ".bin");
-                            OutBinaryFile(coordinates2, tzid, newJsonFileName);
+                            //OutBinaryFile(coordinates2, tzid, newJsonFileName);
+                            string zoneName = tzid + j.ToString("D2") + k.ToString("D2");
+                            Zone tempZpne = MakeZone(coordinates2, tzid, zoneName);
+                            if (tempZpne != null)
+                            {
+                                zones.Add(tempZpne);
+                            }
                         }
                     }
                 }
@@ -145,9 +156,43 @@ namespace TimezonesGeojsonThinOut
                 count++;
                 SetProgressBarValue(count);
             });
+            //}
 
             System.Threading.Thread.Sleep(100);
 
+            string outFileName = Path.Combine(GetOutDirectoryName(), "DATA.bin");
+            if (File.Exists(outFileName))
+            {
+                File.Delete(outFileName);
+            }
+
+            //ファイル書き出し
+            using (BinaryWriter binaryWriter = new BinaryWriter(new FileStream(outFileName, FileMode.Create), System.Text.Encoding.ASCII))
+            {
+                Zone[] sortedZone = zones.ToList().OrderBy(x => x.Name).ToArray();
+                foreach (var zone in sortedZone)
+                {
+                    if (zone == null)
+                    {
+                        continue;
+                    }
+
+                    binaryWriter.Write((zone.Tzid + "\0").ToCharArray());
+
+                    binaryWriter.Write(zone.OffsetMin);
+
+                    //後に続く座標のバイト数を計算
+                    int pointThinByteCount = zone.Vertexes.Length * 2 * sizeof(float);
+                    binaryWriter.Write(pointThinByteCount);
+                    foreach (var point in zone.Vertexes)
+                    {
+                        binaryWriter.Write(point.X);
+                        binaryWriter.Write(point.Y);
+                    }
+                }
+            }
+
+            /*
             //一つのファイルにまとめる
             SetProgressBarIsIndeterminate(true);
             string outFileName = Path.Combine(GetOutDirectoryName(), "DATA.bin");
@@ -172,83 +217,8 @@ namespace TimezonesGeojsonThinOut
                     File.Delete(filename);
                 }
             }
+            */
             SetProgressBarIsIndeterminate(false);
-        }
-
-        private void OutJsonFile(JsonElement coordinates, string tzid, string outFileName)
-        {
-            int pointCount = coordinates.GetArrayLength();
-
-            //間引くための係数
-            int coefficient = 10000;
-            int numThin;
-            if (pointCount < coefficient)
-            {
-                numThin = 1;
-            }
-            else
-            {
-                numThin = pointCount / coefficient;
-            }
-
-            int pointCountThin = pointCount / numThin;
-
-            Feature newFeature = new Feature
-            {
-                Tzid = tzid,
-                Coordinates = new float[pointCountThin][]
-            };
-
-            for (int i = 0; i < pointCount; i += numThin)
-            {
-                //配列外の参照があるので、ガード。
-                if ((i / numThin) >= newFeature.Coordinates.Length)
-                {
-                    break;
-                }
-                newFeature.Coordinates[i / numThin] = new float[2];
-                newFeature.Coordinates[i / numThin][0] = RoundFloat(coordinates[i][0].GetSingle());
-                newFeature.Coordinates[i / numThin][1] = RoundFloat(coordinates[i][1].GetSingle());
-            }
-
-            //ファイル書き出し
-            string jsonString = JsonSerializer.Serialize(newFeature);
-            using (StreamWriter streamWriter = new StreamWriter(outFileName, false))
-            {
-                streamWriter.Write(jsonString);
-            }
-        }
-
-        private void OutCsvFile(JsonElement coordinates, string tzid, string outFileName)
-        {
-            int pointCount = coordinates.GetArrayLength();
-
-            //間引くための係数
-            int coefficient = 10000;
-            int numThin = 1;
-            if (pointCount < coefficient)
-            {
-                numThin = 1;
-            }
-            else
-            {
-                numThin = pointCount / coefficient;
-            }
-
-            //ファイル書き出し
-            using (StreamWriter streamWriter = new StreamWriter(outFileName, false))
-            {
-                streamWriter.WriteLine(tzid);
-
-                for (int i = 0; i < pointCount; i += numThin)
-                {
-                    float x, y;
-                    x = coordinates[i][0].GetSingle();
-                    y = coordinates[i][1].GetSingle();
-
-                    streamWriter.WriteLine($"{x},{y}");
-                }
-            }
         }
 
         private void OutBinaryFile(JsonElement coordinates, string tzid, string outFileName)
@@ -297,6 +267,52 @@ namespace TimezonesGeojsonThinOut
                     binaryWriter.Write(coordinates[i][1].GetSingle());
                 }
             }
+        }
+
+        private Zone MakeZone(JsonElement coordinates, string tzid, string outFileName)
+        {
+            int pointCount = coordinates.GetArrayLength();
+
+            short offsetMin = 0;
+            try
+            {
+                //オフセットを計算し、分で書く。short型2バイト。
+                string tzidWin = TZConvert.IanaToWindows(tzid);
+                TimeZoneInfo timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(tzidWin);
+                offsetMin = (short)timeZoneInfo.BaseUtcOffset.TotalMinutes;
+            }
+            catch (Exception ex)
+            {
+                //タイムゾーンが見つからない場合、ファイルは作成しない。
+                return null;
+            }
+
+            //間引くための係数
+            int coefficient = 10000;
+            int numThin = 1;
+            if (pointCount < coefficient)
+            {
+                numThin = 1;
+            }
+            else
+            {
+                numThin = pointCount / coefficient;
+            }
+
+            Zone zone = new Zone();
+            zone.Name = outFileName;
+            zone.Tzid = tzid;
+            zone.OffsetMin = offsetMin;
+
+            //後に続く座標のバイト数を計算 
+            List<PointF> points = new List<PointF>(pointCount / numThin);
+            for (int i = 0; i < pointCount; i += numThin)
+            {
+                points.Add(new PointF(coordinates[i][0].GetSingle(), coordinates[i][1].GetSingle()));
+            }
+            zone.Vertexes = points.ToArray();
+
+            return zone;
         }
 
         /// <summary>
